@@ -4,7 +4,7 @@ import os, json, time
 from datetime import datetime, timedelta, timezone
 
 TOKEN = os.getenv("TOKEN")
-LOG_CHANNEL = 1483891442920456263
+LOG_CHANNEL = 1483891442920456263  # حط آيدي روم اللوق
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -70,6 +70,7 @@ class PunishMenu(discord.ui.Select):
             discord.SelectOption(label="🚫 إنذار", value="1"),
             discord.SelectOption(label="🗣️ إنذارين", value="2"),
             discord.SelectOption(label="👢 طرد", value="3"),
+            discord.SelectOption(label="⏳ تايم أوت 7 أيام", value="4"),
         ]
 
         super().__init__(placeholder="اختر العقوبة", options=options)
@@ -82,7 +83,7 @@ class PunishMenu(discord.ui.Select):
             return await interaction.response.send_message("❌ لا يمكنك معاقبته", ephemeral=True)
 
         roles = {
-            "warn": 111111111111,  # حط ID صحيح
+            "warn": 111111111111  # حط آيدي رتبة التحذير
         }
 
         durations = {
@@ -92,6 +93,7 @@ class PunishMenu(discord.ui.Select):
         async def give(role_key):
             role = interaction.guild.get_role(roles[role_key])
             if not role:
+                await interaction.followup.send("❌ الرتبة غير موجودة", ephemeral=True)
                 return False
 
             await self.member.add_roles(role)
@@ -119,13 +121,17 @@ class PunishMenu(discord.ui.Select):
             elif v == "3":
                 await self.member.kick()
 
+            elif v == "4":
+                await self.member.timeout(datetime.now(timezone.utc) + timedelta(days=7))
+
             save(data)
 
             await log(interaction.guild, f"⚠️ {interaction.user} ➜ {self.member}")
-            await interaction.followup.send("✅ تم التنفيذ", ephemeral=True)
+            await interaction.followup.send("✅ تم تنفيذ العقوبة", ephemeral=True)
 
-        except:
-            await interaction.followup.send("❌ خطأ", ephemeral=True)
+        except Exception as e:
+            print(e)
+            await interaction.followup.send("❌ خطأ أثناء التنفيذ", ephemeral=True)
 
 # ---------- VIEW ----------
 class PunishView(discord.ui.View):
