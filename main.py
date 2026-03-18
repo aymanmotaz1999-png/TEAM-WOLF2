@@ -1,16 +1,9 @@
-# 🔥 AUTO INSTALL (يحل مشكلة discord نهائياً)
-import os
-try:
-    import discord
-except:
-    os.system("pip install discord.py")
-    import discord
-
+import discord
 from discord import app_commands
 import json
 import time
 import asyncio
-import traceback
+import os
 
 TOKEN = os.getenv("TOKEN")
 LOG_CHANNEL_ID = 1483891442920456263
@@ -30,93 +23,72 @@ def load_data():
         return []
 
 def save_data(data):
-    try:
-        with open("data.json", "w") as f:
-            json.dump(data, f, indent=4)
-    except:
-        pass
+    with open("data.json", "w") as f:
+        json.dump(data, f, indent=4)
 
 # -------- LOG --------
 async def send_log(guild, title, desc):
-    try:
-        channel = guild.get_channel(LOG_CHANNEL_ID)
-        if channel:
-            embed = discord.Embed(title=title, description=desc, color=discord.Color.red())
-            embed.timestamp = discord.utils.utcnow()
-            await channel.send(embed=embed)
-    except:
-        pass
-
-# -------- ERROR FIXER --------
-async def auto_fix(error, guild=None):
-    print("❌ Error:", error)
-    traceback.print_exc()
-
-    try:
-        if guild:
-            ch = guild.get_channel(LOG_CHANNEL_ID)
-            if ch:
-                await ch.send(f"❌ Error:\n```{error}```")
-    except:
-        pass
-
-# -------- AUTO TASK SAFE --------
-async def safe_loop(task):
-    while True:
-        try:
-            await task()
-        except Exception as e:
-            await auto_fix(e)
-            await asyncio.sleep(5)
+    channel = guild.get_channel(LOG_CHANNEL_ID)
+    if channel:
+        embed = discord.Embed(title=title, description=desc, color=discord.Color.red())
+        await channel.send(embed=embed)
 
 # -------- AUTO REMOVE --------
 async def check_roles():
     await client.wait_until_ready()
 
     while True:
-        try:
-            data = load_data()
-            now = int(time.time())
+        data = load_data()
+        now = int(time.time())
 
-            for entry in data[:]:
-                try:
-                    if now >= entry["end_time"]:
-                        guild = client.get_guild(entry["guild_id"])
+        for entry in data[:]:
+            if now >= entry["end_time"]:
+                guild = client.get_guild(entry["guild_id"])
 
-                        if guild:
-                            member = guild.get_member(entry["user_id"])
-                            role = guild.get_role(entry["role_id"])
+                if guild:
+                    member = guild.get_member(entry["user_id"])
+                    role = guild.get_role(entry["role_id"])
 
-                            if member and role:
-                                await member.remove_roles(role)
+                    if member and role:
+                        await member.remove_roles(role)
 
-                                await send_log(
-                                    guild,
-                                    "انتهاء العقوبة",
-                                    f"{member.mention} | {role.name}"
-                                )
+                        await send_log(
+                            guild,
+                            "✅ انتهاء العقوبة",
+                            f"{member.mention} | {role.name}"
+                        )
 
-                        data.remove(entry)
-                        save_data(data)
-
-                except Exception as e:
-                    await auto_fix(e)
-
-        except Exception as e:
-            await auto_fix(e)
+                data.remove(entry)
+                save_data(data)
 
         await asyncio.sleep(10)
 
-# -------- UI --------
+# -------- MENU --------
 class PunishMenu(discord.ui.Select):
     def __init__(self, member):
         self.member = member
 
         options = [
-            discord.SelectOption(label="القذف", value="qathf"),
-            discord.SelectOption(label="السب", value="sab"),
-            discord.SelectOption(label="باند", value="ban"),
-            discord.SelectOption(label="سوء استخدام", value="abuse"),
+            discord.SelectOption(
+                label="🚫 القذف",
+                description="حرمان 7 أيام",
+                value="qathf"
+            ),
+            discord.SelectOption(
+                label="🗣️ السب",
+                description="تحذير 5 أيام",
+                value="sab"
+            ),
+            discord.SelectOption(
+                label="👢 تسحيب",
+                description="طرد من السيرفر",
+                value="kick"
+            ),
+            discord.SelectOption(
+                label="🛠️ استخدام خواص إدارة",
+                description="سحب صلاحيات / رتبة",
+                value="abuse"
+            ),
         ]
 
         super().__init__(placeholder="اختر العقوبة", options=options)
@@ -125,10 +97,11 @@ class PunishMenu(discord.ui.Select):
         try:
             value = self.values[0]
 
+            # 🔴 حط IDs رتبك هون
             roles = {
-                "warn1": 111111111111,
-                "dis1": 222222222222,
-                "demote": 333333333333
+                "warn1": 123456789012345678,
+                "dis1": 987654321098765432,
+                "demote": 555555555555555555
             }
 
             role_id = None
@@ -142,27 +115,31 @@ class PunishMenu(discord.ui.Select):
                 role_id = roles["warn1"]
                 duration = 5 * 86400
 
-            elif value == "ban":
-                await self.member.ban()
+            elif value == "kick":
+                await self.member.kick()
 
                 await send_log(
                     interaction.guild,
-                    "باند",
+                    "👢 تسحيب",
                     f"{interaction.user.mention} ➜ {self.member.mention}"
                 )
 
-                return await interaction.response.send_message("تم الباند", ephemeral=True)
+                return await interaction.response.send_message("تم التسحيب 👢", ephemeral=True)
 
             elif value == "abuse":
                 role_id = roles["demote"]
 
             if role_id:
                 role = interaction.guild.get_role(role_id)
+
+                if not role:
+                    return await interaction.response.send_message("❌ الرتبة غير موجودة", ephemeral=True)
+
                 await self.member.add_roles(role)
 
                 await send_log(
                     interaction.guild,
-                    "عقوبة",
+                    "⚠️ عقوبة",
                     f"{interaction.user.mention} ➜ {self.member.mention}"
                 )
 
@@ -176,12 +153,12 @@ class PunishMenu(discord.ui.Select):
                 })
                 save_data(data)
 
-            await interaction.response.send_message("تم ✅", ephemeral=True)
+            await interaction.response.send_message("✅ تم التنفيذ", ephemeral=True)
 
         except Exception as e:
-            await auto_fix(e, interaction.guild)
-            await interaction.response.send_message("خطأ ❌", ephemeral=True)
+            await interaction.response.send_message(f"❌ خطأ:\n{e}", ephemeral=True)
 
+# -------- VIEW --------
 class PunishView(discord.ui.View):
     def __init__(self, member):
         super().__init__(timeout=None)
@@ -190,31 +167,16 @@ class PunishView(discord.ui.View):
 # -------- COMMAND --------
 @tree.command(name="taim", description="عقوبة عضو")
 async def taim(interaction: discord.Interaction, user: discord.Member):
-    try:
-        await interaction.response.send_message(
-            f"اختر العقوبة لـ {user.mention}",
-            view=PunishView(user)
-        )
-
-        await send_log(
-            interaction.guild,
-            "استخدام أمر",
-            f"{interaction.user.mention} ➜ {user.mention}"
-        )
-
-    except Exception as e:
-        await auto_fix(e, interaction.guild)
+    await interaction.response.send_message(
+        f"اختر العقوبة لـ {user.mention}",
+        view=PunishView(user)
+    )
 
 # -------- READY --------
 @client.event
 async def on_ready():
-    print(f"✅ Logged in as {client.user}")
-
-    try:
-        await tree.sync()
-    except Exception as e:
-        await auto_fix(e)
-
-    client.loop.create_task(safe_loop(check_roles))
+    print(f"✅ {client.user} شغال")
+    await tree.sync()
+    client.loop.create_task(check_roles())
 
 client.run(TOKEN)
