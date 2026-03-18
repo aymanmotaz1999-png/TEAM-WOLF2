@@ -10,6 +10,7 @@ LOG_CHANNEL_ID = 1483891442920456263
 
 intents = discord.Intents.default()
 intents.members = True
+intents.message_content = True
 
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
@@ -27,11 +28,10 @@ def save_data(data):
         json.dump(data, f, indent=4)
 
 # -------- LOG --------
-async def send_log(guild, title, desc):
+async def send_log(guild, text):
     channel = guild.get_channel(LOG_CHANNEL_ID)
     if channel:
-        embed = discord.Embed(title=title, description=desc, color=discord.Color.red())
-        await channel.send(embed=embed)
+        await channel.send(text)
 
 # -------- AUTO REMOVE --------
 async def check_roles():
@@ -51,12 +51,7 @@ async def check_roles():
 
                     if member and role:
                         await member.remove_roles(role)
-
-                        await send_log(
-                            guild,
-                            "✅ انتهاء العقوبة",
-                            f"{member.mention} | {role.name}"
-                        )
+                        await send_log(guild, f"✅ انتهت عقوبة {member.mention} وتم سحب {role.name}")
 
                 data.remove(entry)
                 save_data(data)
@@ -71,22 +66,27 @@ class PunishMenu(discord.ui.Select):
         options = [
             discord.SelectOption(
                 label="🚫 القذف",
-                description="حرمان 7 أيام",
+                description="إنذار دسكورد + تايم أوت أسبوع",
                 value="qathf"
             ),
             discord.SelectOption(
                 label="🗣️ السب",
-                description="تحذير 5 أيام",
+                description="تحذير أول + تحذير ثاني",
                 value="sab"
             ),
             discord.SelectOption(
                 label="👢 تسحيب",
-                description="طرد من السيرفر",
+                description="طرد نهائي",
                 value="kick"
             ),
             discord.SelectOption(
+                label="🔁 تسحيب متكرر",
+                description="تحذيرين",
+                value="repeat"
+            ),
+            discord.SelectOption(
                 label="🛠️ استخدام خواص إدارة",
-                description="سحب صلاحيات / رتبة",
+                description="كسر رتبة",
                 value="abuse"
             ),
         ]
@@ -97,39 +97,24 @@ class PunishMenu(discord.ui.Select):
         try:
             value = self.values[0]
 
-            # 🔴 حط IDs رتبك هون
+            # 🔴 حط IDs الرتب
             roles = {
-                "warn1": 123456789012345678,
-                "dis1": 987654321098765432,
+                "warn1": 111111111111111111,
+                "warn2": 222222222222222222,
+                "discord1": 333333333333333333,
+                "discord2": 444444444444444444,
                 "demote": 555555555555555555
             }
 
-            role_id = None
-            duration = 0
+            duration_map = {
+                "warn1": 5 * 86400,
+                "warn2": 7 * 86400,
+                "discord1": 7 * 86400,
+                "discord2": 14 * 86400
+            }
 
-            if value == "qathf":
-                role_id = roles["dis1"]
-                duration = 7 * 86400
-
-            elif value == "sab":
-                role_id = roles["warn1"]
-                duration = 5 * 86400
-
-            elif value == "kick":
-                await self.member.kick()
-
-                await send_log(
-                    interaction.guild,
-                    "👢 تسحيب",
-                    f"{interaction.user.mention} ➜ {self.member.mention}"
-                )
-
-                return await interaction.response.send_message("تم التسحيب 👢", ephemeral=True)
-
-            elif value == "abuse":
-                role_id = roles["demote"]
-
-            if role_id:
+            async def give_role(role_key):
+                role_id = roles[role_key]
                 role = interaction.guild.get_role(role_id)
 
                 if not role:
@@ -137,23 +122,42 @@ class PunishMenu(discord.ui.Select):
 
                 await self.member.add_roles(role)
 
-                await send_log(
-                    interaction.guild,
-                    "⚠️ عقوبة",
-                    f"{interaction.user.mention} ➜ {self.member.mention}"
-                )
-
-            if duration > 0:
                 data = load_data()
                 data.append({
                     "user_id": self.member.id,
                     "role_id": role_id,
                     "guild_id": interaction.guild.id,
-                    "end_time": int(time.time()) + duration
+                    "end_time": int(time.time()) + duration_map.get(role_key, 0)
                 })
                 save_data(data)
 
-            await interaction.response.send_message("✅ تم التنفيذ", ephemeral=True)
+            # -------- الحالات --------
+            if value == "qathf":
+                await give_role("discord1")
+                await give_role("discord2")
+                await self.member.timeout(discord.utils.utcnow() + discord.timedelta(days=7))
+
+            elif value == "sab":
+                await give_role("warn1")
+                await give_role("warn2")
+
+            elif value == "kick":
+                await self.member.kick()
+                await send_log(interaction.guild, f"👢 تم تسحيب {self.member.mention}")
+
+            elif value == "repeat":
+                await give_role("warn1")
+                await give_role("warn2")
+
+            elif value == "abuse":
+                await give_role("demote")
+
+            await send_log(
+                interaction.guild,
+                f"⚠️ {interaction.user.mention} عاقب {self.member.mention} | {value}"
+            )
+
+            await interaction.response.send_message("✅ تم تنفيذ العقوبة", ephemeral=True)
 
         except Exception as e:
             await interaction.response.send_message(f"❌ خطأ:\n{e}", ephemeral=True)
@@ -165,7 +169,7 @@ class PunishView(discord.ui.View):
         self.add_item(PunishMenu(member))
 
 # -------- COMMAND --------
-@tree.command(name="taim", description="عقوبة عضو")
+@tree.command(name="taim", description="معاقبة عضو")
 async def taim(interaction: discord.Interaction, user: discord.Member):
     await interaction.response.send_message(
         f"اختر العقوبة لـ {user.mention}",
