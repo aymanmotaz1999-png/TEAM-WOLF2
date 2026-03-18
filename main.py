@@ -1,150 +1,137 @@
-const { 
-  Client, 
-  GatewayIntentBits, 
-  EmbedBuilder, 
-  ActionRowBuilder, 
-  StringSelectMenuBuilder, 
-  PermissionsBitField 
-} = require('discord.js');
+import discord
+from discord.ext import commands
+from discord import app_commands
+import asyncio
 
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
-});
+TOKEN = "PUT_YOUR_TOKEN_HERE"
+LOG_CHANNEL_ID = 1483891442920456263
 
-const TOKEN = "PUT_YOUR_TOKEN_HERE";
+# 🔥 ايديات الرتب
+ROLES = {
+    "warn1": 111111111111,  # تحذير اول
+    "warn2": 222222222222,  # تحذير ثاني
+    "warn3": 333333333333,  # تحذير ثالث
+    "dis1": 444444444444,   # انذار اول
+    "dis2": 555555555555    # انذار ثاني
+}
 
-// ايدي روم اللوق
-const LOG_CHANNEL_ID = "1483891442920456263";
+# ⏱️ المدد بالثواني
+DURATIONS = {
+    "warn1": 5 * 24 * 60 * 60,
+    "warn2": 7 * 24 * 60 * 60,
+    "warn3": 14 * 24 * 60 * 60,
+    "dis1": 7 * 24 * 60 * 60,
+    "dis2": 14 * 24 * 60 * 60,
+}
 
-// ايدي الرتب (حط ايديات الرتب من سيرفرك)
-const roles = {
-  warn1: "ROLE_ID_1",
-  warn2: "ROLE_ID_2",
-  warn3: "ROLE_ID_3",
-  dis1: "ROLE_ID_4",
-  dis2: "ROLE_ID_5"
-};
+intents = discord.Intents.all()
+bot = commands.Bot(command_prefix="!", intents=intents)
 
-// مدد العقوبات (بالملي ثانية)
-const durations = {
-  warn1: 5 * 24 * 60 * 60 * 1000,
-  warn2: 7 * 24 * 60 * 60 * 1000,
-  warn3: 14 * 24 * 60 * 60 * 1000,
-  dis1: 7 * 24 * 60 * 60 * 1000,
-  dis2: 14 * 24 * 60 * 60 * 1000
-};
 
-client.once("ready", () => {
-  console.log(`Logged in as ${client.user.tag}`);
-});
+# 🧹 حذف الرتبة بعد مدة
+async def remove_role(member, role_id, delay):
+    await asyncio.sleep(delay)
+    role = member.guild.get_role(role_id)
+    if role and role in member.roles:
+        await member.remove_roles(role)
 
-client.on("interactionCreate", async (interaction) => {
 
-  // أمر /تايم
-  if (interaction.isChatInputCommand()) {
-    if (interaction.commandName === "تايم") {
+# 📋 القائمة
+class PunishSelect(discord.ui.Select):
+    def __init__(self, member):
+        self.member = member
 
-      const member = interaction.options.getMember("user");
+        options = [
+            discord.SelectOption(label="القذف", description="انذار دسكورد اول + انذار ثاني + تايم اوت اسبوع", value="1"),
+            discord.SelectOption(label="السب", description="تحذير اول + تحذير ثاني", value="2"),
+            discord.SelectOption(label="تسحيب", description="باند نهائي", value="3"),
+            discord.SelectOption(label="تسحيب متكرر", description="تحذير + انذار", value="4"),
+            discord.SelectOption(label="استعمال ادارة", description="كسر رتبة", value="5"),
+        ]
 
-      const embed = new EmbedBuilder()
-        .setTitle("📋 نظام العقوبات")
-        .setDescription("اختر نوع المخالفة")
-        .setImage("attachment://image.png"); // الصورة
+        super().__init__(placeholder="اختر العقوبة", options=options)
 
-      const menu = new StringSelectMenuBuilder()
-        .setCustomId("punishment")
-        .setPlaceholder("اختر العقوبة")
-        .addOptions([
-          {
-            label: "القذف",
-            value: "1",
-            description: "انذار دسكورد اول + اندار ثاني + تايم اوت اسبوع"
-          },
-          {
-            label: "السب",
-            value: "2",
-            description: "تحذير اول + تحذير ثاني"
-          },
-          {
-            label: "تسحيب",
-            value: "3",
-            description: "باند نهائي"
-          },
-          {
-            label: "تسحيب متكرر",
-            value: "4",
-            description: "تحذير + انذار"
-          },
-          {
-            label: "استعمال ادارة",
-            value: "5",
-            description: "كسر رتبة"
-          }
-        ]);
+    async def callback(self, interaction: discord.Interaction):
+        log_channel = interaction.guild.get_channel(LOG_CHANNEL_ID)
+        result = ""
 
-      const row = new ActionRowBuilder().addComponents(menu);
+        # 🔴 القذف
+        if self.values[0] == "1":
+            role = interaction.guild.get_role(ROLES["dis1"])
+            await self.member.add_roles(role)
+            asyncio.create_task(remove_role(self.member, role.id, DURATIONS["dis1"]))
 
-      await interaction.reply({
-        embeds: [embed],
-        components: [row],
-        files: ["./image.png"] // حط الصورة بنفس اسم الملف
-      });
+            # تايم اوت اسبوع
+            await self.member.timeout(discord.utils.utcnow() + discord.timedelta(days=7))
 
-      interaction.targetMember = member;
-    }
-  }
+            result = f"📛 القذف → انذار + تايم اوت اسبوع على {self.member}"
 
-  // عند اختيار من القائمة
-  if (interaction.isStringSelectMenu()) {
+        # 🟡 السب
+        elif self.values[0] == "2":
+            role = interaction.guild.get_role(ROLES["warn1"])
+            await self.member.add_roles(role)
+            asyncio.create_task(remove_role(self.member, role.id, DURATIONS["warn1"]))
 
-    const member = interaction.message.interaction?.options?.getMember("user");
-    const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
+            result = f"⚠️ السب → تحذير على {self.member}"
 
-    let logMsg = "";
+        # 🔥 تسحيب
+        elif self.values[0] == "3":
+            await self.member.ban(reason="تسحيب")
+            result = f"⛔ تسحيب → باند {self.member}"
 
-    switch (interaction.values[0]) {
+        # 🟠 تسحيب متكرر
+        elif self.values[0] == "4":
+            role = interaction.guild.get_role(ROLES["warn1"])
+            await self.member.add_roles(role)
+            asyncio.create_task(remove_role(self.member, role.id, DURATIONS["warn1"]))
 
-      case "1":
-        await member.roles.add(roles.dis1);
-        setTimeout(() => member.roles.remove(roles.dis1), durations.dis1);
+            result = f"⚠️ تسحيب متكرر → تحذير {self.member}"
 
-        logMsg = `تم معاقبة ${member} بسبب القذف`;
-        break;
+        # 🔵 استعمال ادارة
+        elif self.values[0] == "5":
+            top_role = self.member.top_role
+            await self.member.remove_roles(top_role)
 
-      case "2":
-        await member.roles.add(roles.warn1);
-        setTimeout(() => member.roles.remove(roles.warn1), durations.warn1);
+            result = f"📉 استعمال ادارة → كسر رتبة {self.member}"
 
-        logMsg = `تم تحذير ${member}`;
-        break;
+        await interaction.response.send_message("✅ تم تنفيذ العقوبة", ephemeral=True)
 
-      case "3":
-        await member.ban();
-        logMsg = `تم باند ${member}`;
-        break;
+        if log_channel:
+            await log_channel.send(f"{result} | بواسطة {interaction.user}")
 
-      case "4":
-        await member.roles.add(roles.warn1);
-        setTimeout(() => member.roles.remove(roles.warn1), durations.warn1);
 
-        logMsg = `تحذير بسبب التسحيب المتكرر`;
-        break;
+# 🧩 View
+class PunishView(discord.ui.View):
+    def __init__(self, member):
+        super().__init__(timeout=None)
+        self.add_item(PunishSelect(member))
 
-      case "5":
-        // كسر رتبة (مثال: إزالة أعلى رتبة)
-        const highest = member.roles.highest;
-        await member.roles.remove(highest);
 
-        logMsg = `تم كسر رتبة ${member}`;
-        break;
-    }
+# 🚀 أمر /تايم
+@bot.tree.command(name="تايم", description="معاقبة عضو")
+@app_commands.describe(user="العضو")
+async def punish(interaction: discord.Interaction, user: discord.Member):
 
-    await interaction.reply({ content: "✅ تم تنفيذ العقوبة", ephemeral: true });
+    embed = discord.Embed(
+        title="📋 نظام العقوبات",
+        description="اختر نوع المخالفة من القائمة"
+    )
 
-    if (logChannel) {
-      logChannel.send(`📜 ${logMsg} | بواسطة ${interaction.user}`);
-    }
-  }
-});
+    file = discord.File("image.png", filename="image.png")
+    embed.set_image(url="attachment://image.png")
 
-client.login(TOKEN);
+    await interaction.response.send_message(
+        embed=embed,
+        view=PunishView(user),
+        file=file
+    )
+
+
+# ✅ تشغيل
+@bot.event
+async def on_ready():
+    await bot.tree.sync()
+    print(f"✅ Bot Ready: {bot.user}")
+
+
+bot.run(TOKEN)
