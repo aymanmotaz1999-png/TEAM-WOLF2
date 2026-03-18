@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands, tasks
-import os, json, time, traceback
+import os, json, time, traceback, asyncio
 from datetime import timedelta
 
 TOKEN = os.getenv("TOKEN")
@@ -15,7 +15,7 @@ def load():
         with open("data.json") as f:
             return json.load(f)
     except:
-        return {"punishments": [], "levels": {}}
+        return {"punishments": [], "levels": {}, "spam": {}}
 
 def save(data):
     with open("data.json", "w") as f:
@@ -33,7 +33,7 @@ async def log(guild, msg):
 # -------- READY --------
 @bot.event
 async def on_ready():
-    print(f"🔥 {bot.user} ONLINE")
+    print(f"☢️ {bot.user} READY")
     auto_remove.start()
 
 # -------- ERROR SYSTEM --------
@@ -42,8 +42,9 @@ async def on_command_error(ctx, error):
     err = "".join(traceback.format_exception(type(error), error, error.__traceback__))
     print(err)
     await ctx.send(f"❌ {error}")
+    await log(ctx.guild, f"❌ ERROR: {error}")
 
-# -------- LEVEL --------
+# -------- LEVEL + AI REPLY --------
 @bot.event
 async def on_message(message):
     if message.author.bot:
@@ -52,6 +53,7 @@ async def on_message(message):
     data = load()
     uid = str(message.author.id)
 
+    # LEVEL
     if uid not in data["levels"]:
         data["levels"][uid] = {"xp": 0, "level": 1}
 
@@ -62,15 +64,21 @@ async def on_message(message):
         data["levels"][uid]["level"] += 1
         await message.channel.send(f"🎉 {message.author.mention} لفّل!")
 
-    save(data)
+    # AI SIMPLE
+    if "هلا" in message.content:
+        await message.channel.send("👋 هلا والله!")
 
-    # -------- ANTI SPAM --------
-    if len(message.content) > 200:
+    # ANTI SPAM
+    data["spam"][uid] = data["spam"].get(uid, 0) + 1
+
+    if data["spam"][uid] > 6:
         try:
-            await message.delete()
+            await message.author.timeout(discord.utils.utcnow() + timedelta(minutes=10))
+            await message.channel.send(f"🚫 سبام: {message.author.mention}")
         except:
             pass
 
+    save(data)
     await bot.process_commands(message)
 
 # -------- AUTO REMOVE --------
@@ -94,27 +102,24 @@ async def auto_remove():
             save(data)
 
 # -------- MENU --------
-class PunishMenu(discord.ui.Select):
+class NuclearMenu(discord.ui.Select):
     def __init__(self, member):
         self.member = member
 
         options = [
-            discord.SelectOption(label="🚫 القذف", description="إنذار + تايم أوت", value="1"),
-            discord.SelectOption(label="🗣️ السب", description="تحذيرين", value="2"),
-            discord.SelectOption(label="👢 تسحيب", description="طرد نهائي", value="3"),
+            discord.SelectOption(label="🚫 قذف", description="إنذار + تايم", value="1"),
+            discord.SelectOption(label="🗣️ سب", description="تحذيرين", value="2"),
+            discord.SelectOption(label="👢 تسحيب", description="طرد", value="3"),
             discord.SelectOption(label="🔁 تسحيب متكرر", description="تحذيرات", value="4"),
-            discord.SelectOption(label="🛠️ استخدام خواص إدارة", description="كسر رتبة", value="5"),
+            discord.SelectOption(label="🛠️ إساءة استخدام الإدارة", description="كسر رتبة", value="5"),
         ]
 
-        super().__init__(placeholder="اختر العقوبة", options=options)
+        super().__init__(placeholder="⚖️ اختر العقوبة", options=options)
 
     async def callback(self, interaction: discord.Interaction):
         try:
             if not interaction.user.guild_permissions.administrator:
                 return await interaction.response.send_message("❌ ما عندك صلاحية", ephemeral=True)
-
-            if self.member.top_role >= interaction.user.top_role:
-                return await interaction.response.send_message("❌ عضو أعلى منك", ephemeral=True)
 
             roles = {
                 "warn1": 111111111111,
@@ -132,7 +137,7 @@ class PunishMenu(discord.ui.Select):
             async def give(role_key):
                 role = interaction.guild.get_role(roles[role_key])
                 if not role:
-                    return await interaction.followup.send("❌ الرتبة ناقصة", ephemeral=True)
+                    return
 
                 await self.member.add_roles(role)
 
@@ -167,21 +172,21 @@ class PunishMenu(discord.ui.Select):
             save(data)
 
             await log(interaction.guild, f"⚠️ {interaction.user} ➜ {self.member}")
-            await interaction.response.send_message("✅ تم تنفيذ العقوبة", ephemeral=True)
+            await interaction.response.send_message("☢️ تم التنفيذ", ephemeral=True)
 
         except Exception as e:
-            await interaction.response.send_message("❌ صار خطأ", ephemeral=True)
+            await interaction.response.send_message("❌ خطأ نووي", ephemeral=True)
 
 # -------- VIEW --------
-class PunishView(discord.ui.View):
+class NuclearView(discord.ui.View):
     def __init__(self, member):
         super().__init__(timeout=None)
-        self.add_item(PunishMenu(member))
+        self.add_item(NuclearMenu(member))
 
 # -------- COMMAND --------
 @bot.command()
 async def taim(ctx, member: discord.Member):
-    await ctx.send(f"⚖️ اختر العقوبة لـ {member.mention}", view=PunishView(member))
+    await ctx.send(f"☢️ نظام العقوبات: {member.mention}", view=NuclearView(member))
 
 # -------- RUN --------
 bot.run(TOKEN)
