@@ -1,148 +1,150 @@
-import discord
-from discord.ext import commands, tasks
-import os, json, time
-from datetime import datetime, timedelta, timezone
+const { 
+  Client, 
+  GatewayIntentBits, 
+  EmbedBuilder, 
+  ActionRowBuilder, 
+  StringSelectMenuBuilder, 
+  PermissionsBitField 
+} = require('discord.js');
 
-TOKEN = os.getenv("TOKEN")
-LOG_CHANNEL = 1483891442920456263  # عدلها
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
+});
 
-intents = discord.Intents.default()
-intents.message_content = True
-intents.members = True
+const TOKEN = "PUT_YOUR_TOKEN_HERE";
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+// ايدي روم اللوق
+const LOG_CHANNEL_ID = "1483891442920456263";
 
-# ---------- DATABASE ----------
-def load():
-    try:
-        with open("data.json") as f:
-            return json.load(f)
-    except:
-        return {"punishments": []}
+// ايدي الرتب (حط ايديات الرتب من سيرفرك)
+const roles = {
+  warn1: "ROLE_ID_1",
+  warn2: "ROLE_ID_2",
+  warn3: "ROLE_ID_3",
+  dis1: "ROLE_ID_4",
+  dis2: "ROLE_ID_5"
+};
 
-def save(data):
-    with open("data.json", "w") as f:
-        json.dump(data, f, indent=4)
+// مدد العقوبات (بالملي ثانية)
+const durations = {
+  warn1: 5 * 24 * 60 * 60 * 1000,
+  warn2: 7 * 24 * 60 * 60 * 1000,
+  warn3: 14 * 24 * 60 * 60 * 1000,
+  dis1: 7 * 24 * 60 * 60 * 1000,
+  dis2: 14 * 24 * 60 * 60 * 1000
+};
 
-data = load()
+client.once("ready", () => {
+  console.log(`Logged in as ${client.user.tag}`);
+});
 
-# ---------- LOG ----------
-async def log(guild, msg):
-    ch = guild.get_channel(LOG_CHANNEL)
-    if ch:
-        await ch.send(msg)
+client.on("interactionCreate", async (interaction) => {
 
-# ---------- READY ----------
-@bot.event
-async def on_ready():
-    print(f"✅ {bot.user} ONLINE")
-    if not auto_remove.is_running():
-        auto_remove.start()
+  // أمر /تايم
+  if (interaction.isChatInputCommand()) {
+    if (interaction.commandName === "تايم") {
 
-# ---------- AUTO REMOVE ----------
-@tasks.loop(seconds=10)
-async def auto_remove():
-    now = int(time.time())
+      const member = interaction.options.getMember("user");
 
-    for p in data["punishments"][:]:
-        if now >= p["end"]:
-            guild = bot.get_guild(p["guild"])
-            if guild:
-                member = guild.get_member(p["user"])
-                role = guild.get_role(p["role"])
+      const embed = new EmbedBuilder()
+        .setTitle("📋 نظام العقوبات")
+        .setDescription("اختر نوع المخالفة")
+        .setImage("attachment://image.png"); // الصورة
 
-                if member and role:
-                    try:
-                        await member.remove_roles(role)
-                        await log(guild, f"✅ انتهت العقوبة: {member.mention}")
-                    except:
-                        pass
+      const menu = new StringSelectMenuBuilder()
+        .setCustomId("punishment")
+        .setPlaceholder("اختر العقوبة")
+        .addOptions([
+          {
+            label: "القذف",
+            value: "1",
+            description: "انذار دسكورد اول + اندار ثاني + تايم اوت اسبوع"
+          },
+          {
+            label: "السب",
+            value: "2",
+            description: "تحذير اول + تحذير ثاني"
+          },
+          {
+            label: "تسحيب",
+            value: "3",
+            description: "باند نهائي"
+          },
+          {
+            label: "تسحيب متكرر",
+            value: "4",
+            description: "تحذير + انذار"
+          },
+          {
+            label: "استعمال ادارة",
+            value: "5",
+            description: "كسر رتبة"
+          }
+        ]);
 
-            data["punishments"].remove(p)
-            save(data)
+      const row = new ActionRowBuilder().addComponents(menu);
 
-# ---------- MENU ----------
-class PunishMenu(discord.ui.Select):
-    def __init__(self, member):
-        self.member = member
+      await interaction.reply({
+        embeds: [embed],
+        components: [row],
+        files: ["./image.png"] // حط الصورة بنفس اسم الملف
+      });
 
-        options = [
-            discord.SelectOption(label="🚫 إنذار", value="1"),
-            discord.SelectOption(label="🗣️ إنذارين", value="2"),
-            discord.SelectOption(label="👢 طرد", value="3"),
-            discord.SelectOption(label="⏳ تايم أوت 7 أيام", value="4"),
-        ]
+      interaction.targetMember = member;
+    }
+  }
 
-        super().__init__(placeholder="اختر العقوبة", options=options)
+  // عند اختيار من القائمة
+  if (interaction.isStringSelectMenu()) {
 
-    async def callback(self, interaction: discord.Interaction):
-        if not interaction.user.guild_permissions.administrator:
-            return await interaction.response.send_message("❌ لا تملك صلاحية", ephemeral=True)
+    const member = interaction.message.interaction?.options?.getMember("user");
+    const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
 
-        if self.member.top_role >= interaction.user.top_role:
-            return await interaction.response.send_message("❌ لا يمكنك معاقبته", ephemeral=True)
+    let logMsg = "";
 
-        roles = {
-            "warn": 111111111111  # حط ID صحيح
-        }
+    switch (interaction.values[0]) {
 
-        durations = {
-            "warn": 3 * 86400
-        }
+      case "1":
+        await member.roles.add(roles.dis1);
+        setTimeout(() => member.roles.remove(roles.dis1), durations.dis1);
 
-        async def give(role_key):
-            role = interaction.guild.get_role(roles[role_key])
-            if not role:
-                await interaction.followup.send("❌ الرتبة غير موجودة", ephemeral=True)
-                return False
+        logMsg = `تم معاقبة ${member} بسبب القذف`;
+        break;
 
-            await self.member.add_roles(role)
+      case "2":
+        await member.roles.add(roles.warn1);
+        setTimeout(() => member.roles.remove(roles.warn1), durations.warn1);
 
-            data["punishments"].append({
-                "user": self.member.id,
-                "role": role.id,
-                "guild": interaction.guild.id,
-                "end": int(time.time()) + durations[role_key]
-            })
-            return True
+        logMsg = `تم تحذير ${member}`;
+        break;
 
-        await interaction.response.defer(ephemeral=True)
+      case "3":
+        await member.ban();
+        logMsg = `تم باند ${member}`;
+        break;
 
-        try:
-            v = self.values[0]
+      case "4":
+        await member.roles.add(roles.warn1);
+        setTimeout(() => member.roles.remove(roles.warn1), durations.warn1);
 
-            if v == "1":
-                await give("warn")
+        logMsg = `تحذير بسبب التسحيب المتكرر`;
+        break;
 
-            elif v == "2":
-                await give("warn")
-                await give("warn")
+      case "5":
+        // كسر رتبة (مثال: إزالة أعلى رتبة)
+        const highest = member.roles.highest;
+        await member.roles.remove(highest);
 
-            elif v == "3":
-                await self.member.kick()
+        logMsg = `تم كسر رتبة ${member}`;
+        break;
+    }
 
-            elif v == "4":
-                await self.member.timeout(datetime.now(timezone.utc) + timedelta(days=7))
+    await interaction.reply({ content: "✅ تم تنفيذ العقوبة", ephemeral: true });
 
-            save(data)
+    if (logChannel) {
+      logChannel.send(`📜 ${logMsg} | بواسطة ${interaction.user}`);
+    }
+  }
+});
 
-            await log(interaction.guild, f"⚠️ {interaction.user} ➜ {self.member}")
-            await interaction.followup.send("✅ تم تنفيذ العقوبة", ephemeral=True)
-
-        except Exception as e:
-            print(e)
-            await interaction.followup.send("❌ خطأ أثناء التنفيذ", ephemeral=True)
-
-# ---------- VIEW ----------
-class PunishView(discord.ui.View):
-    def __init__(self, member):
-        super().__init__(timeout=60)
-        self.add_item(PunishMenu(member))
-
-# ---------- COMMAND ----------
-@bot.command()
-async def taim(ctx, member: discord.Member):
-    await ctx.send(f"⚖️ اختر العقوبة لـ {member.mention}", view=PunishView(member))
-
-# ---------- RUN ----------
-bot.run(TOKEN)
+client.login(TOKEN);
