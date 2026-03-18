@@ -1,9 +1,15 @@
-import discord
+# 🔥 AUTO INSTALL (يحل مشكلة discord نهائياً)
+import os
+try:
+    import discord
+except:
+    os.system("pip install discord.py")
+    import discord
+
 from discord import app_commands
 import json
 import time
 import asyncio
-import os
 import traceback
 
 TOKEN = os.getenv("TOKEN")
@@ -28,19 +34,16 @@ def save_data(data):
         with open("data.json", "w") as f:
             json.dump(data, f, indent=4)
     except:
-        print("خطأ حفظ البيانات")
+        pass
 
 # -------- LOG --------
 async def send_log(guild, title, desc):
     try:
         channel = guild.get_channel(LOG_CHANNEL_ID)
-        if not channel:
-            return
-
-        embed = discord.Embed(title=title, description=desc, color=discord.Color.red())
-        embed.timestamp = discord.utils.utcnow()
-        await channel.send(embed=embed)
-
+        if channel:
+            embed = discord.Embed(title=title, description=desc, color=discord.Color.red())
+            embed.timestamp = discord.utils.utcnow()
+            await channel.send(embed=embed)
     except:
         pass
 
@@ -49,15 +52,24 @@ async def auto_fix(error, guild=None):
     print("❌ Error:", error)
     traceback.print_exc()
 
-    if guild:
-        try:
-            channel = guild.get_channel(LOG_CHANNEL_ID)
-            if channel:
-                await channel.send(f"❌ Error:\n```{error}```")
-        except:
-            pass
+    try:
+        if guild:
+            ch = guild.get_channel(LOG_CHANNEL_ID)
+            if ch:
+                await ch.send(f"❌ Error:\n```{error}```")
+    except:
+        pass
 
-# -------- AUTO REMOVE TASK --------
+# -------- AUTO TASK SAFE --------
+async def safe_loop(task):
+    while True:
+        try:
+            await task()
+        except Exception as e:
+            await auto_fix(e)
+            await asyncio.sleep(5)
+
+# -------- AUTO REMOVE --------
 async def check_roles():
     await client.wait_until_ready()
 
@@ -94,15 +106,6 @@ async def check_roles():
             await auto_fix(e)
 
         await asyncio.sleep(10)
-
-# -------- RESTART TASK IF CRASH --------
-async def safe_task(task_func):
-    while True:
-        try:
-            await task_func()
-        except Exception as e:
-            await auto_fix(e)
-            await asyncio.sleep(5)
 
 # -------- UI --------
 class PunishMenu(discord.ui.Select):
@@ -173,11 +176,11 @@ class PunishMenu(discord.ui.Select):
                 })
                 save_data(data)
 
-            await interaction.response.send_message("تم التنفيذ ✅", ephemeral=True)
+            await interaction.response.send_message("تم ✅", ephemeral=True)
 
         except Exception as e:
             await auto_fix(e, interaction.guild)
-            await interaction.response.send_message("صار خطأ ❌", ephemeral=True)
+            await interaction.response.send_message("خطأ ❌", ephemeral=True)
 
 class PunishView(discord.ui.View):
     def __init__(self, member):
@@ -196,7 +199,7 @@ async def taim(interaction: discord.Interaction, user: discord.Member):
         await send_log(
             interaction.guild,
             "استخدام أمر",
-            f"{interaction.user.mention} استخدم الأمر على {user.mention}"
+            f"{interaction.user.mention} ➜ {user.mention}"
         )
 
     except Exception as e:
@@ -212,6 +215,6 @@ async def on_ready():
     except Exception as e:
         await auto_fix(e)
 
-    client.loop.create_task(safe_task(check_roles))
+    client.loop.create_task(safe_loop(check_roles))
 
 client.run(TOKEN)
