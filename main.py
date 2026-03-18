@@ -1,157 +1,142 @@
-const {
-  Client,
-  GatewayIntentBits,
-  ActionRowBuilder,
-  StringSelectMenuBuilder,
-  SlashCommandBuilder
-} = require('discord.js');
+import discord
+from discord import app_commands
+import json
+import time
+import asyncio
 
-const fs = require('fs');
+intents = discord.Intents.default()
+intents.members = True
 
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
-});
+client = discord.Client(intents=intents)
+tree = app_commands.CommandTree(client)
 
-const TOKEN = "YOUR_BOT_TOKEN";
+# 📁 تحميل البيانات
+def load_data():
+    try:
+        with open("data.json", "r") as f:
+            return json.load(f)
+    except:
+        return []
 
-// 📁 تحميل البيانات
-function loadData() {
-  return JSON.parse(fs.readFileSync('./data.json'));
-}
+# 💾 حفظ البيانات
+def save_data(data):
+    with open("data.json", "w") as f:
+        json.dump(data, f, indent=4)
 
-// 💾 حفظ البيانات
-function saveData(data) {
-  fs.writeFileSync('./data.json', JSON.stringify(data, null, 2));
-}
+# ⏳ فحص العقوبات
+async def check_roles():
+    await client.wait_until_ready()
+    while not client.is_closed():
+        data = load_data()
+        now = int(time.time())
 
-// 🟢 عند تشغيل البوت
-client.once('ready', () => {
-  console.log(`✅ Logged in as ${client.user.tag}`);
+        for entry in data[:]:
+            if now >= entry["end_time"]:
+                guild = client.get_guild(entry["guild_id"])
+                if guild:
+                    member = guild.get_member(entry["user_id"])
+                    if member:
+                        role = guild.get_role(entry["role_id"])
+                        if role:
+                            try:
+                                await member.remove_roles(role)
+                                print(f"تم إزالة الرتبة من {member}")
+                            except:
+                                pass
 
-  // فحص كل 10 ثواني لإزالة الرتب المنتهية
-  setInterval(async () => {
-    let data = loadData();
-    const now = Date.now();
+                data.remove(entry)
+                save_data(data)
 
-    for (let i = 0; i < data.length; i++) {
-      if (now >= data[i].endTime) {
-        try {
-          const guild = await client.guilds.fetch(data[i].guildId);
-          const member = await guild.members.fetch(data[i].userId);
+        await asyncio.sleep(10)
 
-          await member.roles.remove(data[i].roleId);
+# 🟢 عند تشغيل البوت
+@client.event
+async def on_ready():
+    print(f"✅ Logged in as {client.user}")
+    await tree.sync()
+    client.loop.create_task(check_roles())
 
-          console.log(`❌ تم إزالة الرتبة من ${member.user.tag}`);
-        } catch (err) {
-          console.log(err);
+# 🎯 قائمة العقوبات
+class PunishMenu(discord.ui.Select):
+    def __init__(self, member: discord.Member):
+        self.member = member
+
+        options = [
+            discord.SelectOption(label="القذف", value="qathf"),
+            discord.SelectOption(label="السب", value="sab"),
+            discord.SelectOption(label="تسحيب", value="ban"),
+            discord.SelectOption(label="تسحيب متكرر", value="drag"),
+            discord.SelectOption(label="سوء استخدام الإدارة", value="abuse"),
+        ]
+
+        super().__init__(placeholder="اختر العقوبة", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        value = self.values[0]
+
+        # 🔴 غير IDs حسب سيرفرك
+        roles = {
+            "warn1": 123456789,
+            "warn2": 123456789,
+            "warn3": 123456789,
+            "dis1": 123456789,
+            "dis2": 123456789,
+            "demote": 123456789
         }
 
-        data.splice(i, 1);
-        i--;
-      }
-    }
+        role_id = None
+        duration = 0
 
-    saveData(data);
-  }, 10000);
-});
+        if value == "qathf":
+            role_id = roles["dis1"]
+            duration = 7 * 24 * 60 * 60
 
+        elif value == "sab":
+            role_id = roles["warn1"]
+            duration = 5 * 24 * 60 * 60
 
-// 🟢 أمر /taim
-client.on('interactionCreate', async interaction => {
+        elif value == "ban":
+            await self.member.ban()
+            await interaction.response.send_message("🚫 تم الباند", ephemeral=True)
+            return
 
-  if (interaction.isChatInputCommand()) {
-    if (interaction.commandName === 'taim') {
+        elif value == "drag":
+            role_id = roles["dis1"]
+            duration = 7 * 24 * 60 * 60
 
-      const member = interaction.options.getMember('user');
+        elif value == "abuse":
+            role_id = roles["demote"]
 
-      const menu = new StringSelectMenuBuilder()
-        .setCustomId(`punish_${member.id}`)
-        .setPlaceholder('اختر نوع المخالفة')
-        .addOptions([
-          { label: 'القذف', value: 'qathf' },
-          { label: 'السب', value: 'sab' },
-          { label: 'تسحيب', value: 'ban' },
-          { label: 'تسحيب متكرر', value: 'drag_repeat' },
-          { label: 'سوء استخدام الإدارة', value: 'abuse' }
-        ]);
+        if role_id:
+            role = interaction.guild.get_role(role_id)
+            await self.member.add_roles(role)
 
-      const row = new ActionRowBuilder().addComponents(menu);
+        # 💾 تخزين العقوبة
+        if duration > 0:
+            data = load_data()
+            data.append({
+                "user_id": self.member.id,
+                "role_id": role_id,
+                "guild_id": interaction.guild.id,
+                "end_time": int(time.time()) + duration
+            })
+            save_data(data)
 
-      await interaction.reply({
-        content: `📋 اختر العقوبة لـ ${member}`,
-        components: [row]
-      });
-    }
-  }
+        await interaction.response.send_message(f"✅ تم معاقبة {self.member.mention}", ephemeral=True)
 
-  // 🎯 عند اختيار من القائمة
-  if (interaction.isStringSelectMenu()) {
+# 🧾 واجهة
+class PunishView(discord.ui.View):
+    def __init__(self, member):
+        super().__init__()
+        self.add_item(PunishMenu(member))
 
-    const [type, userId] = interaction.customId.split('_');
-    if (type !== 'punish') return;
+# 🟢 أمر /taim
+@tree.command(name="taim", description="إعطاء عقوبة")
+@app_commands.describe(user="اختار العضو")
+async def taim(interaction: discord.Interaction, user: discord.Member):
+    await interaction.response.send_message(
+        f"📋 اختر العقوبة لـ {user.mention}",
+        view=PunishView(user)
+    )
 
-    const member = await interaction.guild.members.fetch(userId);
-
-    let roleId;
-    let duration;
-
-    // 🔴 غير IDs حسب الرتب عندك
-    const roles = {
-      warn1: "ROLE_ID_WARN1",
-      warn2: "ROLE_ID_WARN2",
-      warn3: "ROLE_ID_WARN3",
-      dis1: "ROLE_ID_DIS1",
-      dis2: "ROLE_ID_DIS2",
-      demote: "ROLE_ID_DEMOTE"
-    };
-
-    switch (interaction.values[0]) {
-
-      case 'qathf': // القذف
-        roleId = roles.dis1;
-        duration = 7 * 24 * 60 * 60 * 1000;
-        break;
-
-      case 'sab': // السب
-        roleId = roles.warn1;
-        duration = 5 * 24 * 60 * 60 * 1000;
-        break;
-
-      case 'ban': // تسحيب
-        await member.ban();
-        return interaction.reply('🚫 تم الباند النهائي');
-
-      case 'drag_repeat': // تسحيب متكرر
-        roleId = roles.dis1;
-        duration = 7 * 24 * 60 * 60 * 1000;
-        break;
-
-      case 'abuse': // سوء استخدام
-        roleId = roles.demote;
-        duration = 0;
-        break;
-    }
-
-    if (roleId) {
-      await member.roles.add(roleId);
-    }
-
-    await interaction.reply(`✅ تم إعطاء العقوبة لـ ${member}`);
-
-    // ⏳ تخزين العقوبة
-    if (duration > 0) {
-      let data = loadData();
-
-      data.push({
-        userId: member.id,
-        roleId: roleId,
-        guildId: interaction.guild.id,
-        endTime: Date.now() + duration
-      });
-
-      saveData(data);
-    }
-  }
-});
-
-client.login(TOKEN);
+client.run("YOUR_BOT_TOKEN")
