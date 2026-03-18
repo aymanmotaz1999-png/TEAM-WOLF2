@@ -4,7 +4,7 @@ import os, json, time
 from datetime import datetime, timedelta, timezone
 
 TOKEN = os.getenv("TOKEN")
-LOG_CHANNEL = 1483891442920456263  # حط آيدي روم اللوق
+LOG_CHANNEL = 1483891442920456263  # عدلها
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -83,7 +83,7 @@ class PunishMenu(discord.ui.Select):
             return await interaction.response.send_message("❌ لا يمكنك معاقبته", ephemeral=True)
 
         roles = {
-            "warn": 111111111111  # حط آيدي رتبة التحذير
+            "warn": 111111111111  # حط ID صحيح
         }
 
         durations = {
