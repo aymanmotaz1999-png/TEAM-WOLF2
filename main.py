@@ -23,9 +23,12 @@ def save(data):
 
 # -------- LOG --------
 async def log(guild, msg):
-    ch = guild.get_channel(LOG_CHANNEL)
-    if ch:
-        await ch.send(msg)
+    try:
+        ch = guild.get_channel(LOG_CHANNEL)
+        if ch:
+            await ch.send(msg)
+    except:
+        pass
 
 # -------- READY --------
 @bot.event
@@ -38,9 +41,9 @@ async def on_ready():
 async def on_command_error(ctx, error):
     err = "".join(traceback.format_exception(type(error), error, error.__traceback__))
     print(err)
-    await ctx.send(f"❌ Error:\n```{error}```")
+    await ctx.send(f"❌ {error}")
 
-# -------- LEVEL SYSTEM --------
+# -------- LEVEL --------
 @bot.event
 async def on_message(message):
     if message.author.bot:
@@ -61,29 +64,16 @@ async def on_message(message):
 
     save(data)
 
-    await bot.process_commands(message)
-
-# -------- ANTI SPAM --------
-spam = {}
-
-@bot.event
-async def on_message(message):
-    if message.author.bot:
-        return
-
-    uid = message.author.id
-    spam[uid] = spam.get(uid, 0) + 1
-
-    if spam[uid] > 6:
+    # -------- ANTI SPAM --------
+    if len(message.content) > 200:
         try:
-            await message.author.timeout(discord.utils.utcnow() + timedelta(minutes=5))
-            await message.channel.send(f"🚫 سبام: {message.author.mention}")
+            await message.delete()
         except:
             pass
 
     await bot.process_commands(message)
 
-# -------- AUTO REMOVE ROLES --------
+# -------- AUTO REMOVE --------
 @tasks.loop(seconds=10)
 async def auto_remove():
     data = load()
@@ -104,68 +94,94 @@ async def auto_remove():
             save(data)
 
 # -------- MENU --------
-class Menu(discord.ui.Select):
+class PunishMenu(discord.ui.Select):
     def __init__(self, member):
         self.member = member
 
         options = [
-            discord.SelectOption(label="🚫 قذف", value="1"),
-            discord.SelectOption(label="🗣️ سب", value="2"),
-            discord.SelectOption(label="👢 تسحيب", value="3"),
-            discord.SelectOption(label="🔁 تسحيب متكرر", value="4"),
-            discord.SelectOption(label="🛠️ استخدام خواص إدارة", value="5"),
+            discord.SelectOption(label="🚫 القذف", description="إنذار + تايم أوت", value="1"),
+            discord.SelectOption(label="🗣️ السب", description="تحذيرين", value="2"),
+            discord.SelectOption(label="👢 تسحيب", description="طرد نهائي", value="3"),
+            discord.SelectOption(label="🔁 تسحيب متكرر", description="تحذيرات", value="4"),
+            discord.SelectOption(label="🛠️ استخدام خواص إدارة", description="كسر رتبة", value="5"),
         ]
 
         super().__init__(placeholder="اختر العقوبة", options=options)
 
     async def callback(self, interaction: discord.Interaction):
         try:
+            if not interaction.user.guild_permissions.administrator:
+                return await interaction.response.send_message("❌ ما عندك صلاحية", ephemeral=True)
+
+            if self.member.top_role >= interaction.user.top_role:
+                return await interaction.response.send_message("❌ عضو أعلى منك", ephemeral=True)
+
             roles = {
                 "warn1": 111111111111,
-                "warn2": 222222222222
+                "warn2": 222222222222,
+                "demote": 333333333333
+            }
+
+            durations = {
+                "warn1": 5*86400,
+                "warn2": 7*86400
             }
 
             data = load()
 
-            if self.values[0] == "1":
-                role = interaction.guild.get_role(roles["warn1"])
+            async def give(role_key):
+                role = interaction.guild.get_role(roles[role_key])
+                if not role:
+                    return await interaction.followup.send("❌ الرتبة ناقصة", ephemeral=True)
+
                 await self.member.add_roles(role)
 
-                data["punishments"].append({
-                    "user": self.member.id,
-                    "role": role.id,
-                    "guild": interaction.guild.id,
-                    "end": int(time.time()) + 604800
-                })
+                if role_key in durations:
+                    data["punishments"].append({
+                        "user": self.member.id,
+                        "role": role.id,
+                        "guild": interaction.guild.id,
+                        "end": int(time.time()) + durations[role_key]
+                    })
 
+            v = self.values[0]
+
+            if v == "1":
+                await give("warn1")
                 await self.member.timeout(discord.utils.utcnow() + timedelta(days=7))
 
-            elif self.values[0] == "3":
+            elif v == "2":
+                await give("warn1")
+                await give("warn2")
+
+            elif v == "3":
                 await self.member.kick()
+
+            elif v == "4":
+                await give("warn1")
+                await give("warn2")
+
+            elif v == "5":
+                await give("demote")
 
             save(data)
 
             await log(interaction.guild, f"⚠️ {interaction.user} ➜ {self.member}")
-            await interaction.response.send_message("✅ تم", ephemeral=True)
+            await interaction.response.send_message("✅ تم تنفيذ العقوبة", ephemeral=True)
 
         except Exception as e:
-            await interaction.response.send_message("❌ خطأ", ephemeral=True)
+            await interaction.response.send_message("❌ صار خطأ", ephemeral=True)
 
 # -------- VIEW --------
-class View(discord.ui.View):
+class PunishView(discord.ui.View):
     def __init__(self, member):
         super().__init__(timeout=None)
-        self.add_item(Menu(member))
+        self.add_item(PunishMenu(member))
 
 # -------- COMMAND --------
 @bot.command()
 async def taim(ctx, member: discord.Member):
-    await ctx.send("اختر العقوبة:", view=View(member))
-
-# -------- PANEL --------
-@bot.command()
-async def panel(ctx):
-    await ctx.send("🎛️ لوحة تحكم")
+    await ctx.send(f"⚖️ اختر العقوبة لـ {member.mention}", view=PunishView(member))
 
 # -------- RUN --------
 bot.run(TOKEN)
