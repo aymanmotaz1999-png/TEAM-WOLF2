@@ -10,7 +10,6 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 LOG_CHANNEL_ID = 1483891442920456263
 
-# الرتب
 roles = {
     "warn1": 1475095531389714604,
     "warn2": 1475097777104097545,
@@ -20,17 +19,14 @@ roles = {
     "timeout": 1473015129019908232
 }
 
-# المدد (بالثواني)
 durations = {
     "warn1": 5 * 24 * 60 * 60,
     "warn2": 7 * 24 * 60 * 60,
     "warn3": 14 * 24 * 60 * 60,
     "disc1": 7 * 24 * 60 * 60,
-    "disc2": 14 * 24 * 60 * 60,
-    "timeout": 7 * 24 * 60 * 60
+    "disc2": 14 * 24 * 60 * 60
 }
 
-# إضافة رتبة مؤقتة
 async def add_timed_role(member, role_id, duration):
     role = member.guild.get_role(role_id)
     if role:
@@ -38,74 +34,66 @@ async def add_timed_role(member, role_id, duration):
         await asyncio.sleep(duration)
         await member.remove_roles(role)
 
-# منيو العقوبات
 class PunishMenu(discord.ui.Select):
     def __init__(self, member):
         self.member = member
 
         options = [
-            discord.SelectOption(label="🚫 القذف", value="qazf", description="انذار دسكورد + تايم اوت"),
-            discord.SelectOption(label="🗣️ السب", value="sab", description="تحذيرات"),
-            discord.SelectOption(label="⛔ تسحيب", value="ban", description="باند نهائي"),
-            discord.SelectOption(label="🔁 تسحيب متكرر", value="repeat", description="انذارات دسكورد"),
-            discord.SelectOption(label="🛠️ إساءة استخدام الإدارة", value="abuse", description="كسر رتبة"),
+            discord.SelectOption(label="🚫 القذف", value="qazf"),
+            discord.SelectOption(label="🗣️ السب", value="sab"),
+            discord.SelectOption(label="⛔ تسحيب", value="ban"),
+            discord.SelectOption(label="🔁 تسحيب متكرر", value="repeat"),
+            discord.SelectOption(label="🛠️ إساءة استخدام الإدارة", value="abuse"),
         ]
 
         super().__init__(placeholder="اختر العقوبة ⚖️", options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        log_channel = interaction.guild.get_channel(LOG_CHANNEL_ID)
         member = self.member
+        log_channel = interaction.guild.get_channel(LOG_CHANNEL_ID)
 
         if self.values[0] == "qazf":
             asyncio.create_task(add_timed_role(member, roles["disc1"], durations["disc1"]))
             asyncio.create_task(add_timed_role(member, roles["disc2"], durations["disc2"]))
-
             await member.add_roles(interaction.guild.get_role(roles["timeout"]))
             await member.timeout(discord.utils.utcnow() + timedelta(days=7))
-
-            log_msg = f"🚫 تم معاقبة {member.mention} بسبب القذف"
+            log = f"🚫 القذف | {member.mention}"
 
         elif self.values[0] == "sab":
             asyncio.create_task(add_timed_role(member, roles["warn1"], durations["warn1"]))
             asyncio.create_task(add_timed_role(member, roles["warn2"], durations["warn2"]))
-
-            log_msg = f"🗣️ تم إعطاء تحذيرات لـ {member.mention}"
+            log = f"🗣️ السب | {member.mention}"
 
         elif self.values[0] == "ban":
             await member.ban()
-            log_msg = f"⛔ تم باند {member}"
+            log = f"⛔ باند | {member}"
 
         elif self.values[0] == "repeat":
             asyncio.create_task(add_timed_role(member, roles["disc1"], durations["disc1"]))
             asyncio.create_task(add_timed_role(member, roles["disc2"], durations["disc2"]))
-
-            log_msg = f"🔁 تسحيب متكرر {member.mention}"
+            log = f"🔁 تسحيب متكرر | {member.mention}"
 
         elif self.values[0] == "abuse":
             await member.edit(roles=[])
-            log_msg = f"🛠️ تم كسر رتبة {member.mention}"
+            log = f"🛠️ كسر رتبة | {member.mention}"
 
-        await interaction.response.send_message("✅ تم تنفيذ العقوبة", ephemeral=True)
+        await interaction.response.send_message("✅ تمت العقوبة", ephemeral=True)
 
         if log_channel:
-            await log_channel.send(log_msg)
+            await log_channel.send(log)
 
-# View
 class PunishView(discord.ui.View):
     def __init__(self, member):
         super().__init__()
         self.add_item(PunishMenu(member))
 
-# أمر سلاش
-@bot.tree.command(name="عقوبة", description="إعطاء عقوبة لعضو")
+@bot.tree.command(name="عقوبة", description="إعطاء عقوبة")
 async def punish(interaction: discord.Interaction, user: discord.Member):
-
     file = discord.File("teamwolf.png", filename="teamwolf.png")
 
     embed = discord.Embed(
         title="⚖️ قائمة العقوبات",
-        description=f"اختر العقوبة المناسبة لـ {user.mention}",
+        description=f"اختر العقوبة لـ {user.mention}",
         color=discord.Color.red()
     )
 
@@ -113,7 +101,6 @@ async def punish(interaction: discord.Interaction, user: discord.Member):
 
     await interaction.response.send_message(embed=embed, view=PunishView(user), file=file)
 
-# تايم اوت تلقائي للإدارة
 @bot.event
 async def on_voice_state_update(member, before, after):
     if member.guild_permissions.administrator:
@@ -123,7 +110,6 @@ async def on_voice_state_update(member, before, after):
             except:
                 pass
 
-# تشغيل البوت
 @bot.event
 async def on_ready():
     await bot.tree.sync()
