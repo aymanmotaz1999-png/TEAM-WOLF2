@@ -1,130 +1,129 @@
-const { Client, GatewayIntentBits, ActionRowBuilder, StringSelectMenuBuilder, PermissionsBitField } = require('discord.js');
+import discord
+from discord.ext import commands
+from discord import app_commands
+import asyncio
 
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildVoiceStates]
-});
+intents = discord.Intents.all()
+bot = commands.Bot(command_prefix="!", intents=intents)
 
-const LOG_CHANNEL = "1483891442920456263";
+LOG_CHANNEL_ID = 1483891442920456263
 
-// IDs
-const roles = {
-  warn1: "1475095531389714604",
-  warn2: "1475097777104097545",
-  warn3: "1475098153421377567",
-  disc1: "1473015121906368715",
-  disc2: "1473015122753749012",
-  timeoutRole: "1473015129019908232"
-};
-
-// مدد العقوبات (بالملي ثانية)
-const durations = {
-  warn1: 5 * 24 * 60 * 60 * 1000,
-  warn2: 7 * 24 * 60 * 60 * 1000,
-  warn3: 14 * 24 * 60 * 60 * 1000,
-  disc1: 7 * 24 * 60 * 60 * 1000,
-  disc2: 14 * 24 * 60 * 60 * 1000,
-  timeout: 7 * 24 * 60 * 60 * 1000
-};
-
-// إزالة الرتبة بعد مدة
-function addTimedRole(member, roleId, time) {
-  member.roles.add(roleId);
-  setTimeout(() => {
-    member.roles.remove(roleId);
-  }, time);
+# الرتب
+roles = {
+    "warn1": 1475095531389714604,
+    "warn2": 1475097777104097545,
+    "warn3": 1475098153421377567,
+    "disc1": 1473015121906368715,
+    "disc2": 1473015122753749012,
+    "timeout": 1473015129019908232
 }
 
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
+# المدد (بالثواني)
+durations = {
+    "warn1": 5 * 24 * 60 * 60,
+    "warn2": 7 * 24 * 60 * 60,
+    "warn3": 14 * 24 * 60 * 60,
+    "disc1": 7 * 24 * 60 * 60,
+    "disc2": 14 * 24 * 60 * 60,
+    "timeout": 7 * 24 * 60 * 60
+}
 
-  if (interaction.commandName === "عقوبة") {
-    const user = interaction.options.getUser("user");
+# إضافة رتبة مؤقتة
+async def add_timed_role(member, role_id, duration):
+    role = member.guild.get_role(role_id)
+    if role:
+        await member.add_roles(role)
+        await asyncio.sleep(duration)
+        await member.remove_roles(role)
 
-    const menu = new StringSelectMenuBuilder()
-      .setCustomId(`punish_${user.id}`)
-      .setPlaceholder("اختر نوع العقوبة ⚖️")
-      .addOptions([
-        { label: "🚫 القذف", value: "qazf", description: "انذار دسكورد + تايم اوت" },
-        { label: "🗣️ السب", value: "sab", description: "تحذيرات" },
-        { label: "⛔ تسحيب", value: "ban", description: "باند نهائي" },
-        { label: "🔁 تسحيب متكرر", value: "repeat", description: "انذارات دسكورد" },
-        { label: "🛠️ إساءة استخدام الإدارة", value: "abuse", description: "كسر رتبة" }
-      ]);
+# منيو العقوبات
+class PunishMenu(discord.ui.Select):
+    def __init__(self, member):
+        self.member = member
 
-    const row = new ActionRowBuilder().addComponents(menu);
+        options = [
+            discord.SelectOption(label="🚫 القذف", value="qazf", description="انذار دسكورد + تايم اوت"),
+            discord.SelectOption(label="🗣️ السب", value="sab", description="تحذيرات"),
+            discord.SelectOption(label="⛔ تسحيب", value="ban", description="باند نهائي"),
+            discord.SelectOption(label="🔁 تسحيب متكرر", value="repeat", description="انذارات دسكورد"),
+            discord.SelectOption(label="🛠️ إساءة استخدام الإدارة", value="abuse", description="كسر رتبة"),
+        ]
 
-    await interaction.reply({
-      content: `اختر العقوبة لـ ${user}`,
-      components: [row]
-    });
-  }
-});
+        super().__init__(placeholder="اختر العقوبة ⚖️", options=options)
 
-// عند اختيار العقوبة
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isStringSelectMenu()) return;
+    async def callback(self, interaction: discord.Interaction):
+        log_channel = interaction.guild.get_channel(LOG_CHANNEL_ID)
+        member = self.member
 
-  const userId = interaction.customId.split("_")[1];
-  const member = await interaction.guild.members.fetch(userId);
+        if self.values[0] == "qazf":
+            asyncio.create_task(add_timed_role(member, roles["disc1"], durations["disc1"]))
+            asyncio.create_task(add_timed_role(member, roles["disc2"], durations["disc2"]))
 
-  const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL);
+            # تايم اوت
+            await member.add_roles(interaction.guild.get_role(roles["timeout"]))
+            await member.timeout(discord.utils.utcnow() + discord.timedelta(days=7))
 
-  let logMsg = "";
+            log_msg = f"🚫 تم معاقبة {member.mention} بسبب القذف"
 
-  switch (interaction.values[0]) {
-    case "qazf":
-      addTimedRole(member, roles.disc1, durations.disc1);
-      setTimeout(() => {
-        addTimedRole(member, roles.disc2, durations.disc2);
-      }, 1000);
+        elif self.values[0] == "sab":
+            asyncio.create_task(add_timed_role(member, roles["warn1"], durations["warn1"]))
+            asyncio.create_task(add_timed_role(member, roles["warn2"], durations["warn2"]))
 
-      member.roles.add(roles.timeoutRole);
-      member.timeout(7 * 24 * 60 * 60 * 1000);
+            log_msg = f"🗣️ تم إعطاء تحذيرات لـ {member.mention}"
 
-      logMsg = `🚫 تم معاقبة ${member} بسبب القذف`;
-      break;
+        elif self.values[0] == "ban":
+            await member.ban()
+            log_msg = f"⛔ تم باند {member}"
 
-    case "sab":
-      addTimedRole(member, roles.warn1, durations.warn1);
-      setTimeout(() => {
-        addTimedRole(member, roles.warn2, durations.warn2);
-      }, 1000);
+        elif self.values[0] == "repeat":
+            asyncio.create_task(add_timed_role(member, roles["disc1"], durations["disc1"]))
+            asyncio.create_task(add_timed_role(member, roles["disc2"], durations["disc2"]))
 
-      logMsg = `🗣️ تم إعطاء تحذيرات لـ ${member}`;
-      break;
+            log_msg = f"🔁 تسحيب متكرر {member.mention}"
 
-    case "ban":
-      await member.ban();
-      logMsg = `⛔ تم باند ${member}`;
-      break;
+        elif self.values[0] == "abuse":
+            await member.edit(roles=[])
+            log_msg = f"🛠️ تم كسر رتبة {member.mention}"
 
-    case "repeat":
-      addTimedRole(member, roles.disc1, durations.disc1);
-      setTimeout(() => {
-        addTimedRole(member, roles.disc2, durations.disc2);
-      }, 1000);
+        await interaction.response.send_message("✅ تم تنفيذ العقوبة", ephemeral=True)
 
-      logMsg = `🔁 تسحيب متكرر ${member}`;
-      break;
+        if log_channel:
+            await log_channel.send(log_msg)
 
-    case "abuse":
-      member.roles.set([]);
-      logMsg = `🛠️ تم كسر رتبة ${member}`;
-      break;
-  }
+# View
+class PunishView(discord.ui.View):
+    def __init__(self, member):
+        super().__init__()
+        self.add_item(PunishMenu(member))
 
-  await interaction.reply({ content: "✅ تم تنفيذ العقوبة", ephemeral: true });
+# أمر سلاش
+@bot.tree.command(name="عقوبة", description="إعطاء عقوبة لعضو")
+@app_commands.describe(user="اختر العضو")
+async def punish(interaction: discord.Interaction, user: discord.Member):
 
-  logChannel.send(logMsg);
-});
+    embed = discord.Embed(
+        title="⚖️ قائمة العقوبات",
+        description=f"اختر العقوبة المناسبة لـ {user.mention}",
+        color=discord.Color.red()
+    )
 
-// تايم أوت تلقائي عند الميوت/دفن
-client.on("voiceStateUpdate", async (oldState, newState) => {
-  if (!newState.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
+    embed.set_image(url="PUT_IMAGE_LINK_HERE")
 
-  if (oldState.serverMute !== newState.serverMute || oldState.serverDeaf !== newState.serverDeaf) {
-    newState.member.timeout(5 * 60 * 1000); // 5 دقائق
-  }
-});
+    await interaction.response.send_message(embed=embed, view=PunishView(user))
 
-client.login("TOKEN_HERE");
+# تايم اوت تلقائي للإدارة
+@bot.event
+async def on_voice_state_update(member, before, after):
+    if member.guild_permissions.administrator:
+        if before.mute != after.mute or before.deaf != after.deaf:
+            try:
+                await member.timeout(discord.utils.utcnow() + discord.timedelta(minutes=5))
+            except:
+                pass
+
+@bot.event
+async def on_ready():
+    await bot.tree.sync()
+    print(f"Logged in as {bot.user}")
+
+bot.run("TOKEN_HERE")
