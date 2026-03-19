@@ -2,6 +2,8 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import asyncio
+import os
+from datetime import timedelta
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -59,9 +61,8 @@ class PunishMenu(discord.ui.Select):
             asyncio.create_task(add_timed_role(member, roles["disc1"], durations["disc1"]))
             asyncio.create_task(add_timed_role(member, roles["disc2"], durations["disc2"]))
 
-            # تايم اوت
             await member.add_roles(interaction.guild.get_role(roles["timeout"]))
-            await member.timeout(discord.utils.utcnow() + discord.timedelta(days=7))
+            await member.timeout(discord.utils.utcnow() + timedelta(days=7))
 
             log_msg = f"🚫 تم معاقبة {member.mention} بسبب القذف"
 
@@ -98,8 +99,9 @@ class PunishView(discord.ui.View):
 
 # أمر سلاش
 @bot.tree.command(name="عقوبة", description="إعطاء عقوبة لعضو")
-@app_commands.describe(user="اختر العضو")
 async def punish(interaction: discord.Interaction, user: discord.Member):
+
+    file = discord.File("teamwolf.png", filename="teamwolf.png")
 
     embed = discord.Embed(
         title="⚖️ قائمة العقوبات",
@@ -107,9 +109,9 @@ async def punish(interaction: discord.Interaction, user: discord.Member):
         color=discord.Color.red()
     )
 
-    embed.set_image(url="PUT_IMAGE_LINK_HERE")
+    embed.set_image(url="attachment://teamwolf.png")
 
-    await interaction.response.send_message(embed=embed, view=PunishView(user))
+    await interaction.response.send_message(embed=embed, view=PunishView(user), file=file)
 
 # تايم اوت تلقائي للإدارة
 @bot.event
@@ -117,13 +119,14 @@ async def on_voice_state_update(member, before, after):
     if member.guild_permissions.administrator:
         if before.mute != after.mute or before.deaf != after.deaf:
             try:
-                await member.timeout(discord.utils.utcnow() + discord.timedelta(minutes=5))
+                await member.timeout(discord.utils.utcnow() + timedelta(minutes=5))
             except:
                 pass
 
+# تشغيل البوت
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"Logged in as {bot.user}")
+    print(f"✅ Bot is online: {bot.user}")
 
-bot.run("TOKEN_HERE")
+bot.run(os.getenv("TOKEN"))
