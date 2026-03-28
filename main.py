@@ -1,15 +1,16 @@
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 from discord import app_commands
 import asyncio
+import os
 import re
+from datetime import timedelta
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 LOG_CHANNEL_ID = 1483891442920456263
 
-# الرتب
 roles = {
     "warn1": 1475095531389714604,
     "warn2": 1475097777104097545,
@@ -19,29 +20,25 @@ roles = {
     "timeout": 1473015129019908232,
 }
 
-# مدد العقوبات (بالثواني)
 durations = {
-    "warn1": 5 * 24 * 60 * 60,
-    "warn2": 7 * 24 * 60 * 60,
-    "warn3": 14 * 24 * 60 * 60,
-    "disc1": 7 * 24 * 60 * 60,
-    "disc2": 14 * 24 * 60 * 60,
+    "warn1": 5*24*60*60,
+    "warn2": 7*24*60*60,
+    "warn3": 14*24*60*60,
+    "disc1": 7*24*60*60,
+    "disc2": 14*24*60*60,
 }
 
-# إزالة الرتبة بعد مدة
 async def remove_role_later(member, role, delay):
     await asyncio.sleep(delay)
     if role in member.roles:
         await member.remove_roles(role)
 
-# لوق
-async def send_log(guild, message):
-    channel = guild.get_channel(LOG_CHANNEL_ID)
-    if channel:
-        await channel.send(message)
+async def log(guild, msg):
+    ch = guild.get_channel(LOG_CHANNEL_ID)
+    if ch:
+        await ch.send(msg)
 
-# القائمة
-class PunishSelect(discord.ui.Select):
+class Menu(discord.ui.Select):
     def __init__(self, member):
         self.member = member
         options = [
@@ -55,68 +52,69 @@ class PunishSelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         guild = interaction.guild
-        member = self.member
+        m = self.member
 
         if self.values[0] == "قذف":
             r1 = guild.get_role(roles["disc1"])
             r2 = guild.get_role(roles["disc2"])
-            await member.add_roles(r1, r2)
-            await member.timeout(discord.utils.utcnow() + discord.timedelta(days=7))
-
-            bot.loop.create_task(remove_role_later(member, r1, durations["disc1"]))
-            bot.loop.create_task(remove_role_later(member, r2, durations["disc2"]))
+            await m.add_roles(r1, r2)
+            await m.timeout(discord.utils.utcnow() + timedelta(days=7))
+            bot.loop.create_task(remove_role_later(m, r1, durations["disc1"]))
+            bot.loop.create_task(remove_role_later(m, r2, durations["disc2"]))
 
         elif self.values[0] == "سب":
             r1 = guild.get_role(roles["warn1"])
             r2 = guild.get_role(roles["warn2"])
-            await member.add_roles(r1, r2)
-
-            bot.loop.create_task(remove_role_later(member, r1, durations["warn1"]))
-            bot.loop.create_task(remove_role_later(member, r2, durations["warn2"]))
+            await m.add_roles(r1, r2)
+            bot.loop.create_task(remove_role_later(m, r1, durations["warn1"]))
+            bot.loop.create_task(remove_role_later(m, r2, durations["warn2"]))
 
         elif self.values[0] == "تسحيب":
-            await member.ban(reason="تسحيب")
+            await m.ban(reason="تسحيب")
 
         elif self.values[0] == "تسحيب متكرر":
             r1 = guild.get_role(roles["disc1"])
             r2 = guild.get_role(roles["disc2"])
-            await member.add_roles(r1, r2)
+            await m.add_roles(r1, r2)
 
         elif self.values[0] == "استعمال ادارة":
-            for role in member.roles:
+            for role in m.roles:
                 if role.permissions.administrator:
-                    await member.remove_roles(role)
+                    await m.remove_roles(role)
 
-        await interaction.response.send_message("تم تنفيذ العقوبة ✅", ephemeral=True)
-        await send_log(guild, f"تم معاقبة {member.mention} بواسطة {interaction.user.mention}")
+        await interaction.response.send_message("✅ تم تنفيذ العقوبة", ephemeral=True)
+        await log(guild, f"🚨 {interaction.user.mention} عاقب {m.mention}")
 
-class PunishView(discord.ui.View):
+class View(discord.ui.View):
     def __init__(self, member):
         super().__init__()
-        self.add_item(PunishSelect(member))
+        self.add_item(Menu(member))
 
-# أمر سلاش
 @bot.tree.command(name="عقوبة")
 @app_commands.describe(member="اختار العضو")
 async def punish(interaction: discord.Interaction, member: discord.Member):
-    await interaction.response.send_message("اختر العقوبة:", view=PunishView(member), ephemeral=True)
+    await interaction.response.send_message("اختر العقوبة:", view=View(member), ephemeral=True)
 
-# 🛑 Anti Spam
 @bot.event
-async def on_message(message):
-    if message.author.bot:
+async def on_message(msg):
+    if msg.author.bot:
         return
 
     # سبام
-    if len(message.content) > 200:
-        await message.author.timeout(discord.utils.utcnow() + discord.timedelta(minutes=3))
-        await send_log(message.guild, f"سبام: {message.author.mention}")
+    if len(msg.content) > 200:
+        await msg.author.timeout(discord.utils.utcnow() + timedelta(minutes=3))
+        await log(msg.guild, f"⚠️ سبام: {msg.author.mention}")
 
     # روابط
-    if re.search(r"discord.gg/", message.content):
-        await message.author.timeout(discord.utils.utcnow() + discord.timedelta(hours=1))
-        await send_log(message.guild, f"رابط خارجي: {message.author.mention}")
+    if re.search(r"discord.gg", msg.content):
+        await msg.author.timeout(discord.utils.utcnow() + timedelta(hours=1))
+        await log(msg.guild, f"🔗 رابط: {msg.author.mention}")
 
-    await bot.process_commands(message)
+    await bot.process_commands(msg)
 
-bot.run("YOUR_TOKEN_HERE")
+@bot.event
+async def on_ready():
+    await bot.tree.sync()
+    print(f"✅ Logged in as {bot.user}")
+
+bot.run(os.getenv("TOKEN"))
