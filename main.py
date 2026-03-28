@@ -10,7 +10,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 LOG_CHANNEL_ID = 1483891442920456263
 
-# رتب محمية
+# رتب محمية (ما تنعاقب)
 PROTECTED_ROLES = [
     1473015044643094643,
     1473015048443269160,
@@ -30,7 +30,7 @@ roles = {
     "timeout": 1473015129019908232,
 }
 
-# مدد
+# المدد
 durations = {
     "warn1": 5*24*60*60,
     "warn2": 7*24*60*60,
@@ -69,7 +69,7 @@ class PunishSelect(discord.ui.Select):
         member = self.member
 
         if is_protected(member):
-            await interaction.response.send_message("❌ لا يمكن معاقبة هذا العضو", ephemeral=True)
+            await interaction.response.send_message("❌ هذا العضو محمي", ephemeral=True)
             return
 
         # قذف
@@ -117,6 +117,7 @@ class PunishView(discord.ui.View):
         super().__init__()
         self.add_item(PunishSelect(member))
 
+# أمر سلاش
 @bot.tree.command(name="عقوبة")
 @app_commands.describe(member="اختار العضو")
 async def punish(interaction: discord.Interaction, member: discord.Member):
@@ -138,7 +139,7 @@ async def on_message(message):
         await message.author.timeout(discord.utils.utcnow() + timedelta(minutes=3))
         await send_log(message.guild, f"⚠️ سبام: {message.author.mention}")
 
-    # روابط
+    # روابط ديسكورد
     if re.search(r"(discord.gg/|discord.com/invite/)", message.content):
         try:
             await message.delete()
@@ -152,6 +153,7 @@ async def on_message(message):
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"🔥 Bot Ready: {bot.user}")
+    print(f"✅ Bot Ready: {bot.user}")
 
-bot.run("YOUR_TOKEN_HERE")
+# 🔥 حط التوكن هون
+bot.run("PUT_YOUR_TOKEN_HERE")
